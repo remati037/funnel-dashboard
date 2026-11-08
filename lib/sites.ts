@@ -1,4 +1,5 @@
-import { CURRENCY, SiteConfig, sites, today } from "./config";
+import { CURRENCY, SiteConfig, devMode, sites, today } from "./config";
+import { demoSite } from "./demo";
 
 export type Step = {
   type: string; step_id: number; name: string; views: number; conversions: number; revenue: number;
@@ -65,6 +66,9 @@ export async function fetchSite(src: string, from: string, to: string, refresh =
 /** Svi sajtovi za period – paralelno. */
 export async function aggregate(from: string, to: string, refresh = false) {
   const list = sites();
+  if (!list.length && devMode()) {
+    return { currency: CURRENCY, from, to, generated_at: new Date().toISOString(), cached: false, demo: true, sites: [demoSite()], errors: [] };
+  }
   const results = await Promise.allSettled(list.map((s) => fetchSite(s.url, from, to, refresh)));
   const out = { currency: CURRENCY, from, to, generated_at: new Date().toISOString(), cached: false, sites: [] as Site[], errors: [] as { site: string; message: string }[] };
   results.forEach((r, i) => {

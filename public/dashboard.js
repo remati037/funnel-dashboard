@@ -31,6 +31,8 @@ function shell(){
   <div class="fd-header">
     <h1>${esc(FDASH.title||"Funnel Dashboard")} <small id="updated"></small></h1>
     <div class="controls">
+      <div class="m-modes" id="modeChips"></div>
+      <div class="sep"></div>
       <div id="siteChips" class="controls"></div>
       <div class="sep"></div>
       <div id="rangeChips" class="controls"></div>
@@ -42,6 +44,7 @@ function shell(){
   </div>
   <div class="fd-main">
     <div id="fdErrors"></div>
+    <div id="mapView"></div>
     <div id="overview">
       <section class="kpis" id="kpis"></section>
       <section class="card" id="prio" style="margin-bottom:16px"></section>
@@ -79,7 +82,8 @@ async function load(refresh){
 }
 
 /* ---------------- state ---------------- */
-let state = { site:"all", period:null, insTab:"bad", sort:"revenue", zoom:1, view:null };
+let state = { site:"all", period:null, insTab:"bad", sort:"revenue", zoom:1, view:null, mode:"map" };
+try{ if(localStorage.getItem("fdash_mode")==="list") state.mode="list"; }catch(e){}
 function go(id){ state.view=id||null; try{ history.pushState(null,"",id?"#/funnel/"+id:location.pathname) }catch(e){} render(); window.scrollTo(0,0); }
 
 const fmt = n => new Intl.NumberFormat("sr-RS",{maximumFractionDigits:0}).format(n);
@@ -125,6 +129,9 @@ function grade(st){
 
 /* ---------------- render ---------------- */
 function renderControls(){
+  const mc=document.getElementById("modeChips");
+  mc.innerHTML=[["map","Mapa"],["list","Detaljno"]].map(([k,l])=>`<button class="chip ${state.mode===k&&!state.view?"active":""}" data-mode="${k}">${l}</button>`).join("");
+  mc.querySelectorAll("button").forEach(b=>b.onclick=()=>{ state.mode=b.dataset.mode; try{localStorage.setItem("fdash_mode",state.mode)}catch(e){} go(null); });
   const sc=document.getElementById("siteChips");
   sc.innerHTML=[{id:"all",name:"Svi sajtovi"},...(DATA?DATA.sites:[])].map(s=>`<button class="chip ${state.site===s.id?"active":""}" data-site="${s.id}">${s.name}</button>`).join("");
   sc.querySelectorAll("button").forEach(b=>b.onclick=()=>{state.site=b.dataset.site;go(null)});
@@ -634,7 +641,8 @@ function render(){
   if(!DATA){ return; }
   renderControls(); renderErrors();
   const m=state.view?[0,state.view]:null;
-  const ov=document.getElementById("overview"), dt=document.getElementById("detail");
+  const ov=document.getElementById("overview"), dt=document.getElementById("detail"), mv=document.getElementById("mapView");
+  mv.style.display="none";
   if(m){
     const siteSave=state.site; state.site="all";
     const f=scaled().find(x=>x.id===m[1]); state.site=siteSave;
@@ -643,6 +651,11 @@ function render(){
   }
   ov.style.display="block"; dt.style.display="none";
   const F=scaled();
+  if(F.length && state.mode==="map" && typeof renderMap==="function"){
+    ov.style.display="none"; mv.style.display="block"; renderMap(F);
+    document.getElementById("updated").textContent="· "+periodLabel()+(DATA.cached?" · iz keša":"");
+    return;
+  }
   if(!F.length){
     ov.innerHTML=`<div class="fd-empty">Nema pronađenih funnela za ovaj period.<br><br>${FDASH.settingsUrl?`Proveri da li je FunnelKit aktivan i da li su sajtovi dodati u <a href="${FDASH.settingsUrl}">podešavanjima</a>.`:"Probaj drugi period."}</div>`;
     shellNeeded=true;

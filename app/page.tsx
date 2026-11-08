@@ -26,6 +26,7 @@ export default async function Page() {
       </div>
       <script dangerouslySetInnerHTML={{ __html: `var FDASH=${JSON.stringify(cfg).replace(/</g, "\\u003c")};` }} />
       <Script src="/dashboard.js" strategy="afterInteractive" />
+      <Script src="/map.js" strategy="afterInteractive" />
     </>
   );
 }
