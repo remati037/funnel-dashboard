@@ -27,6 +27,9 @@ export default function Login() {
   return (
     <div id="fdash-app" className="standalone" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh" }}>
       <form onSubmit={submit} className="fd-dialog" style={{ width: 360 }}>
+        <div className="logo login-logo">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18l-7 8.5V19l-4 2v-8.5z" /></svg>
+        </div>
         <h2>Funnel Dashboard</h2>
         <p className="muted small">Prijavi se nalogom koji ti je dao administrator.</p>
         <label>Email</label>

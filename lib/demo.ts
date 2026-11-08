@@ -40,6 +40,7 @@ export function demoSite(): Site {
         ["landing", "Sales page", "/sp/kralj-pasivnog-prihoda/", 3100, 620, 0],
         ["checkout", "Checkout", "/checkouts/kpp-checkout/", 620, 248, 47],
         ["bump", "Order bump: Radna sveska", null, 248, 40, 19],
+        ["bump", "Order bump: Audio verzija", null, 248, 22, 15],
         ["upsell", "Upsell: Kako da tvoj novac radi za tebe", "/offer/kako-da-tvoj-novac-radi-za-tebe-na-rate-kpp2/", 248, 11, 77],
         ["thankyou", "Hvala", "/order-confirmed/kpp-thank-you/", 248, 0, 0],
       ]),

@@ -1,14 +1,15 @@
 /* Funnel Dashboard – MAPA funnela (glavni ekran).
-   Koristi pomoćne funkcije iz dashboard.js (evaluate, priorities, fmt, eur, p1, pct, go, recBtn…). */
+   Koristi pomoćne funkcije iz dashboard.js (evaluate, priorities, fmt, eur, p1, pct, go, recBtn, IC…). */
 const MAP = { sel: null, analysis: false, bust: {} };
 
 const shotUrl = (view) => {
   const raw = unesc(view);
   return "/api/shot?url=" + encodeURIComponent(raw) + (MAP.bust[raw] ? "&v=" + MAP.bust[raw] : "");
 };
-const host = (view) => { try { return new URL(unesc(view)).hostname.replace(/^www\./, ""); } catch (e) { return ""; } };
+const plural = (n, one, few, many) => n % 10 === 1 && n % 100 !== 11 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? few : many;
+const bumpName = (s) => String(s.name || "").replace(/^order bump:\s*/i, "") || "Order bump";
 
-/* glavni koraci u nizu; bump-ovi vise ispod prethodnog koraka (checkout) */
+/* glavni koraci u nizu; bump-ovi pripadaju prethodnom koraku (checkout) */
 function mapSteps(f) {
   const main = [];
   f.steps.forEach((s, i) => {
@@ -19,52 +20,56 @@ function mapSteps(f) {
   return main;
 }
 
-/* tekst iznad strelice: koliko ljudi ide dalje sa ovog koraka */
 function flowLabel(s) {
   if (!s.views) return "";
-  const r = pct(s.conversions, s.views);
   const word = { landing: "ide dalje", optin: "se prijavi", checkout: "kupi", upsell: "prihvati", downsell: "prihvati" }[s.type] || "dalje";
-  return `${p1(r)} ${word}`;
+  return `<b>${p1(pct(s.conversions, s.views))}</b><span>${word}</span>`;
 }
 
-/* najveća šansa po funnelu (iz postojeće analize) */
+/* najveća šansa po funnelu (postojeća analiza) */
 function topChance(f) {
   const E = evaluate(f);
   return [...E.bad, ...E.warn].filter((it) => it.s && it.gain > 0).sort((a, b) => b.gain - a.gain)[0] || null;
 }
+const isHot = (chance, s) => MAP.analysis && chance && chance.s.step_id === s.step_id;
+const isSel = (f, s) => MAP.sel && MAP.sel.fid === f.id && MAP.sel.idx === s.idx;
 
 function pageCard(f, s, chance) {
   const L = s.links || {};
   const g = grade(s);
-  const hot = chance && chance.s.step_id === s.step_id;
-  const selected = MAP.sel && MAP.sel.fid === f.id && MAP.sel.idx === s.idx;
+  const hot = isHot(chance, s);
   const thumb = L.view
-    ? `<img src="${shotUrl(L.view)}" alt="" loading="lazy" onload="this.parentNode.classList.add('ok')" onerror="this.parentNode.classList.add('err')"><span class="m-load">Slikam stranicu…</span><span class="m-noimg">Slika nije dostupna</span>`
-    : `<span class="m-noimg" style="display:flex">Nema stranice</span>`;
-  return `<div class="m-page ${selected ? "sel" : ""} ${hot && MAP.analysis ? "hot" : ""}" data-f="${f.id}" data-i="${s.idx}">
-      ${hot && MAP.analysis ? `<div class="m-hot"><span class="m-hot-arrow">▼</span>+${eur(chance.gain)}</div>` : ""}
-      <div class="m-browser"><div class="m-bar"><i></i><i></i><i></i><span>${L.view ? host(L.view) : ""}</span></div><div class="m-thumb">${thumb}</div></div>
-      <div class="m-cap"><span class="type ${s.type}">${TYPE_LABEL[s.type] || s.type}</span>${MAP.analysis && g ? `<span class="m-grade ${g}"></span>` : ""}</div>
-      <div class="m-nums"><b>${fmt(s.views)}</b> posetilaca${s.revenue ? ` · <b>${eur(s.revenue)}</b>` : ""}</div>
+    ? `<img src="${shotUrl(L.view)}" alt="" loading="lazy" onload="this.parentNode.classList.add('ok')" onerror="this.parentNode.classList.add('err')"><span class="m-load">Slikam stranicu…</span><span class="m-noimg">${IC.image}Slika nije dostupna</span>`
+    : `<span class="m-noimg" style="display:flex">${IC.image}Nema stranice</span>`;
+  return `<div class="m-page ${isSel(f, s) ? "sel" : ""} ${hot ? "hot" : ""}" data-f="${f.id}" data-i="${s.idx}" role="button" tabindex="0" aria-label="${TYPE_LABEL[s.type] || s.type}: detalji">
+      ${hot ? `<div class="m-tag">${IC.trendUp}+${eur(chance.gain)} potencijal</div>` : ""}
+      <div class="m-shot">${thumb}</div>
+      <div class="m-lbl"><span style="color:var(--text);font-size:13px;font-weight:500">${MAP.analysis && g ? `<i class="m-dot ${g}"></i>` : ""}${TYPE_LABEL[s.type] || s.type}</span><span>${fmt(s.views)} posetilaca</span></div>
+      ${s.revenue ? `<div class="m-lbl2">Prihod <b>${eur(s.revenue)}</b></div>` : ""}
     </div>`;
 }
 
-function bumpCard(f, b, chance) {
-  const hot = MAP.analysis && chance && chance.s.step_id === b.step_id;
-  const selected = MAP.sel && MAP.sel.fid === f.id && MAP.sel.idx === b.idx;
-  return `<div class="m-bump ${selected ? "sel" : ""} ${hot ? "hot" : ""}" data-f="${f.id}" data-i="${b.idx}">
-      <span class="type bump">Order bump</span> ${p1(pct(b.conversions, b.views))} uzme${b.revenue ? ` · <b>${eur(b.revenue)}</b>` : ""}
-      ${hot ? `<div class="m-hot-inline">◀ +${eur(chance.gain)}</div>` : ""}
-    </div>`;
+function bumpsBlock(f, s, chance) {
+  if (!s.bumps.length) return s.type === "checkout" && MAP.analysis ? `<div class="m-bumps"><div class="none">Nema order bumpa na ovom checkoutu</div></div>` : "";
+  const n = s.bumps.length;
+  const total = s.bumps.reduce((a, b) => a + b.revenue, 0);
+  return `<div class="m-bumps"><div class="h">${IC.layers}${n} ${plural(n, "order bump", "order bumpa", "order bumpova")}${n > 1 ? ` · ${eur(total)}` : ""}</div>${s.bumps
+    .map((b) => {
+      const hot = isHot(chance, b);
+      return `<button class="m-bump ${isSel(f, b) ? "sel" : ""} ${hot ? "hot" : ""}" data-f="${f.id}" data-i="${b.idx}">
+          <span class="n">${bumpName(b)}</span>
+          <span class="d"><span>${p1(pct(b.conversions, b.views))} uzme · ${fmt(b.conversions)}</span>${hot ? `<em>+${eur(chance.gain)}</em>` : `<b>${eur(b.revenue)}</b>`}</span>
+        </button>`;
+    })
+    .join("")}</div>`;
 }
 
 function arrow(s, chance) {
   const r = s.views ? pct(s.conversions, s.views) : 0;
-  const leak = MAP.analysis && chance && chance.s.step_id === s.step_id;
   const dots = Math.max(1, Math.min(4, Math.round(r / 10)));
   let d = "";
-  for (let k = 0; k < dots; k++) d += `<i style="animation-delay:${(k * 1.8) / dots}s"></i>`;
-  return `<div class="m-arrow ${leak ? "leak" : ""}"><span class="m-pc">${flowLabel(s)}</span><div class="m-line">${d}</div></div>`;
+  for (let k = 0; k < dots; k++) d += `<i style="animation-delay:${(k * 2.2) / dots}s"></i>`;
+  return `<div class="m-arrow ${isHot(chance, s) ? "leak" : ""}"><div class="m-pc">${flowLabel(s)}</div><div class="m-line">${d}</div></div>`;
 }
 
 function funnelRow(f) {
@@ -72,14 +77,14 @@ function funnelRow(f) {
   const main = mapSteps(f);
   let flow = "";
   main.forEach((s, i) => {
-    flow += `<div class="m-col">${pageCard(f, s, chance)}${s.bumps.length ? `<div class="m-drop"></div>${s.bumps.map((b) => bumpCard(f, b, chance)).join("")}` : ""}</div>`;
+    flow += `<div class="m-col">${pageCard(f, s, chance)}${bumpsBlock(f, s, chance)}</div>`;
     if (i < main.length - 1) flow += arrow(s, chance);
   });
   return `<section class="m-row" id="row-${f.id}">
       <div class="m-head">
-        <div><button class="m-name" data-open="${f.id}" title="Otvori detaljnu analizu funnela">${f.name} <span>→</span></button>
-          <span class="site-tag">${f.site.name} · ${fmt(f.orders)} porudžbina · konverzija ${p1(f.cr)}</span></div>
-        <div class="m-rev">${eur(f.revenue)}<small>${periodLabel()}</small></div>
+        <div><button class="m-name" data-open="${f.id}" title="Otvori detaljnu analizu funnela">${f.name}${IC.arrowR}</button>
+          <div class="m-meta">${f.site.name} · ${fmt(f.orders)} ${plural(f.orders, "porudžbina", "porudžbine", "porudžbina")} · konverzija ${p1(f.cr)}</div></div>
+        <div class="m-rev">${eur(f.revenue)}<small>prihod u periodu</small></div>
       </div>
       <div class="m-flow">${flow}</div>
     </section>`;
@@ -87,15 +92,13 @@ function funnelRow(f) {
 
 /* ---------- desni panel ---------- */
 function sideOverview(F) {
-  const rev = F.reduce((a, f) => a + f.revenue, 0);
-  const orders = F.reduce((a, f) => a + f.orders, 0);
-  const P = MAP.analysis ? priorities(F).filter((it) => it.s).slice(0, 5) : [];
-  return `<div class="m-side-h">Ukupno</div>
-    <div class="m-total">${eur(rev)}</div>
-    <div class="site-tag" style="margin-bottom:14px">${F.length} funnela · ${fmt(orders)} porudžbina</div>
-    ${MAP.analysis
-      ? `<div class="m-side-h">Najveće šanse</div>${P.length ? P.map((it, k) => `<button class="m-chance" data-f="${it.f.id}" data-i="${it.f.steps.indexOf(it.s)}"><b>${k + 1}. ${it.f.name} · ${TYPE_LABEL[it.s.type]}</b><span>${p1(it.r)} (cilj ${it.b.good}%) · <em>+${eur(it.gain)}</em></span></button>`).join("") : `<div class="act-empty">Svi koraci su na cilju.</div>`}`
-      : `<div class="m-hint">Klikni na stranicu da vidiš detalje.<br>Uključi <b>Analizu</b> da vidiš gde funneli gube najviše novca.</div>`}`;
+  const P = priorities(F).filter((it) => it.s).slice(0, 6);
+  return `<h3>Najveće šanse</h3>
+    <div class="s">Gde funneli gube najviše novca, poređano po iznosu.</div>
+    ${P.length
+      ? P.map((it, k) => `<button class="m-op" data-f="${it.f.id}" data-i="${it.f.steps.indexOf(it.s)}"><span class="n">${k + 1}</span><span><span class="t">${it.f.name} · ${TYPE_LABEL[it.s.type]}</span><small>${p1(it.r)} · cilj ${it.b.good}%</small></span><span class="g">+${eur(it.gain)}</span></button>`).join("")
+      : `<div class="act-empty">Svi koraci su na cilju.</div>`}
+    <div class="m-hint" style="margin-top:14px">Klikni na stranicu za detalje. <b>Analiza</b> gore desno označi najveću šansu u svakom funnelu.</div>`;
 }
 
 function sideStep(f, s) {
@@ -106,29 +109,29 @@ function sideStep(f, s) {
   const r = pct(s.conversions, s.views);
   const chance = topChance(f);
   REC = [];
-  return `<button class="m-close" id="mClose">← Pregled</button>
-    <div class="m-side-h">${f.name}</div>
-    <h3 class="m-step-t"><span class="type ${s.type}">${TYPE_LABEL[s.type] || s.type}</span> ${s.name}</h3>
-    ${L.view ? `<a href="${L.view}" target="_blank" rel="noopener" class="m-big"><img src="${shotUrl(L.view)}" alt=""></a>` : ""}
+  return `<button class="m-close" id="mClose">${IC.arrowL}Sve šanse</button>
+    <div class="m-crumb">${f.name}</div>
+    <h3 class="m-step-t"><span class="type ${s.type}">${TYPE_LABEL[s.type] || s.type}</span>${s.type === "bump" ? bumpName(s) : s.name}</h3>
+    ${L.view ? `<a href="${L.view}" target="_blank" rel="noopener" class="m-big" title="Otvori stranicu"><img src="${shotUrl(L.view)}" alt=""></a>` : ""}
     <div class="m-stats">
       <div><span>Posetioci</span><b>${fmt(s.views)}</b></div>
-      <div><span>${s.type === "checkout" ? "Kupovine" : "Dalje"}</span><b>${fmt(s.conversions)}</b></div>
+      <div><span>${s.type === "checkout" ? "Kupovine" : s.type === "bump" || isOffer(s.type) ? "Prihvatilo" : "Ide dalje"}</span><b>${fmt(s.conversions)}</b></div>
       <div><span>Konverzija</span><b class="${g || ""}">${s.views ? p1(r) : "–"}</b></div>
       <div><span>Prihod</span><b>${eur(s.revenue)}</b></div>
     </div>
-    ${b ? `<div class="m-bench">Cilj za ${TYPE_LABEL[s.type].toLowerCase()}: <b>${b.good}%</b> (${b.label}) · ispod ${b.bad}% je loše</div>` : ""}
-    ${chance && chance.s.step_id === s.step_id ? `<div class="m-chance-box"><b>Najveća šansa u ovom funnelu</b>Na ${b.good}% konverzije ovo je oko <b>+${eur(chance.gain)}</b> u istom periodu.</div>` : ""}
-    ${tips.length ? `<div class="m-side-h" style="margin-top:14px">Šta uraditi</div><ul class="m-tips">${tips.map((t) => `<li>${t}</li>`).join("")}</ul>` : ""}
+    ${b ? `<div class="m-bench">Cilj: <b>${b.good}%</b> ${b.label} · ispod ${b.bad}% je loše</div>` : ""}
+    ${chance && chance.s.step_id === s.step_id ? `<div class="m-chance-box"><strong>Najveća šansa u ovom funnelu</strong>Na ${b.good}% konverzije ovaj korak donosi oko <b>+${eur(chance.gain)}</b> više u istom periodu.</div>` : ""}
+    ${tips.length ? `<div class="m-sh">Šta uraditi</div><ul class="m-tips">${tips.map((t) => `<li>${t}</li>`).join("")}</ul>` : ""}
     <div class="m-acts">
-      ${L.view ? `<a class="act ghost" href="${L.view}" target="_blank" rel="noopener">Otvori stranicu ↗</a>` : ""}
-      ${L.edit ? `<a class="act ghost" href="${L.edit}" target="_blank" rel="noopener">Uredi u FunnelKitu ↗</a>` : ""}
-      ${recBtn(f, s, null, "✎ Zabeleži izmenu")}
+      ${recBtn(f, s, null, "Zabeleži izmenu")}
+      ${L.view ? `<a class="act ghost" href="${L.view}" target="_blank" rel="noopener">Otvori stranicu ${IC.ext}</a>` : ""}
+      ${L.edit ? `<a class="act ghost" href="${L.edit}" target="_blank" rel="noopener">FunnelKit ${IC.ext}</a>` : ""}
     </div>
-    ${L.view ? `<div class="m-side-h" style="margin-top:16px">Slika stranice</div>
-    <div class="m-acts">
-      <button class="act ghost" id="mRefresh">↻ Osveži sliku</button>
-      <label class="act ghost">⬆ Ubaci svoju sliku<input type="file" id="mUpload" accept="image/jpeg,image/png,image/webp" hidden></label>
-      <button class="act ghost" id="mReset" title="Ukloni ručnu sliku i vrati automatsku">Vrati automatsku</button>
+    ${L.view ? `<div class="m-sh">Slika stranice</div>
+    <div class="m-acts" style="margin-top:0">
+      <button class="act ghost" id="mRefresh">${IC.refresh}Osveži</button>
+      <label class="act ghost">${IC.upload}Ubaci svoju<input type="file" id="mUpload" accept="image/jpeg,image/png,image/webp" hidden></label>
+      <button class="act ghost" id="mReset" title="Ukloni ručnu sliku i vrati automatsku">${IC.undo}Automatska</button>
     </div><div class="m-msg" id="mMsg"></div>` : ""}`;
 }
 
@@ -139,28 +142,34 @@ function renderMap(F) {
   const selF = MAP.sel && F.find((f) => f.id === MAP.sel.fid);
   const selS = selF && selF.steps[MAP.sel.idx];
   if (MAP.sel && !selS) MAP.sel = null;
+  const rev = F.reduce((a, f) => a + f.revenue, 0);
+  const orders = F.reduce((a, f) => a + f.orders, 0);
+  const keepScroll = el.querySelector(".m-side") ? el.querySelector(".m-side").scrollTop : 0;
   el.innerHTML = `
-    <div class="m-top">
-      <div class="m-legend">${DATA.demo ? `<span class="m-demo">DEMO podaci</span>` : ""}Prave stranice · brojevi za ${periodLabel()}</div>
-      <button class="chip ${MAP.analysis ? "active" : ""}" id="mAnalysis">${MAP.analysis ? "✓ Analiza uključena" : "⚡ Analiza"}</button>
-    </div>
+    <div class="m-sum"><span class="l">Ukupan prihod</span><span class="v">${eur(rev)}</span>
+      <span class="s">${F.length} ${plural(F.length, "funnel", "funnela", "funnela")} · ${fmt(orders)} ${plural(orders, "porudžbina", "porudžbine", "porudžbina")} · ${periodLabel()}</span>
+      ${DATA.demo ? `<span class="m-demo">Demo podaci</span>` : ""}</div>
     <div class="m-layout">
       <div class="m-board">${sorted.map(funnelRow).join("")}</div>
       <aside class="m-side" id="mSide">${selS ? sideStep(selF, selS) : sideOverview(F)}</aside>
     </div>`;
+  if (!selS) el.querySelector(".m-side").scrollTop = keepScroll;
   bindMap(el, F);
 }
 
 function bindMap(el, F) {
-  el.querySelector("#mAnalysis").onclick = () => { MAP.analysis = !MAP.analysis; renderMap(F); };
   el.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => go(b.dataset.open)));
-  el.querySelectorAll(".m-page,.m-bump,.m-chance").forEach((c) => (c.onclick = (e) => {
-    e.stopPropagation();
-    MAP.sel = { fid: c.dataset.f, idx: +c.dataset.i };
-    renderMap(F);
-    const row = document.getElementById("row-" + c.dataset.f);
-    if (c.classList.contains("m-chance") && row) row.scrollIntoView({ behavior: "smooth", block: "center" });
-  }));
+  el.querySelectorAll(".m-page,.m-bump,.m-op").forEach((c) => {
+    const open = (e) => {
+      e.stopPropagation();
+      MAP.sel = { fid: c.dataset.f, idx: +c.dataset.i };
+      renderMap(F);
+      const row = document.getElementById("row-" + c.dataset.f);
+      if (c.classList.contains("m-op") && row) row.scrollIntoView({ behavior: "smooth", block: "center" });
+    };
+    c.onclick = open;
+    c.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(e); } };
+  });
   const close = el.querySelector("#mClose");
   if (close) close.onclick = () => { MAP.sel = null; renderMap(F); };
   bindRec(el);
@@ -174,7 +183,7 @@ function bindMap(el, F) {
   el.querySelector("#mRefresh").onclick = async () => {
     msg("Pravim novu sliku… (10–20 s)");
     const r = await fetch("/api/shot?refresh=1&url=" + encodeURIComponent(raw), { credentials: "same-origin" });
-    if (r.ok && r.headers.get("X-Shot-Source") === "manual") return msg("Ova stranica ima tvoju sliku. Klikni „Vrati automatsku” da je skineš.", true);
+    if (r.ok && r.headers.get("X-Shot-Source") === "manual") return msg("Ova stranica ima tvoju sliku. Klikni „Automatska” da je skineš.", true);
     r.ok ? reload() : msg("Slika nije napravljena. Probaj ponovo ili ubaci svoju.", true);
   };
   el.querySelector("#mUpload").onchange = async (e) => {

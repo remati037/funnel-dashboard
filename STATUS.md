@@ -3,6 +3,10 @@ Ažurirano: 2026-11-08
 Faza: razvoj
 
 ## Gde smo stali
+- Kompletan redizajn (pravac „tabla”): svetla tačkasta pozadina, bele ograđene kartice funnela, Inter,
+  prave ikonice umesto emojija, zaglavlje sa menijima za sajt i period, dugme Analiza i meni naloga.
+  Isti stil važi za Mapu, Detaljno, detalj funnela, dijaloge i prijavu.
+- Ispod checkouta piše broj order bumpova i za svaki: naziv, % koji uzme, broj i prihod.
 - Grana `feature/funnel-mapa` (nije na `main`, ništa nije objavljeno na Vercel).
 - Nova **mapa funnela** je glavni ekran: svaki funnel je red pravih stranica (screenshot sa sajta),
   povezanih animiranim strelicama, sa prihodom, posetiocima i konverzijom. Order bump visi ispod checkouta.
