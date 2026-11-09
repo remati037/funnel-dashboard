@@ -1,6 +1,29 @@
 
 /* Funnel Dashboard – UI (podaci stižu sa REST rute fdash/v1/aggregate) */
 let DATA = null;
+/* ikonice (Lucide, MIT) */
+const _i = d => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+const IC = {
+  funnel:_i('<path d="M3 4h18l-7 8.5V19l-4 2v-8.5z"/>'),
+  refresh:_i('<path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/>'),
+  activity:_i('<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>'),
+  globe:_i('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>'),
+  calendar:_i('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>'),
+  settings:_i('<path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.3a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.5a2 2 0 0 1-1 1.7l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.3a2 2 0 0 1 1 1.7v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.3a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.7v-.5a2 2 0 0 1 1-1.7l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.3a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>'),
+  logout:_i('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>'),
+  arrowR:_i('<path d="M5 12h14M13 5l7 7-7 7"/>'),
+  arrowL:_i('<path d="M19 12H5M11 5l-7 7 7 7"/>'),
+  ext:_i('<path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>'),
+  pen:_i('<path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>'),
+  upload:_i('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>'),
+  undo:_i('<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/>'),
+  trendUp:_i('<path d="m22 7-8.5 8.5-5-5L2 17"/><path d="M16 7h6v6"/>'),
+  plus:_i('<path d="M12 5v14M5 12h14"/>'),
+  minus:_i('<path d="M5 12h14"/>'),
+  image:_i('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>'),
+  layers:_i('<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>'),
+};
+const initials = e => { const n=String(e||"").split("@")[0].split(/[._-]+/).filter(Boolean); return ((n[0]||"?")[0]+((n[1]||"")[0]||"")).toUpperCase(); };
 /* ---------- periodi ---------- */
 const PRESETS = [
   {k:"today",l:"Danas"},{k:"yesterday",l:"Juče"},{k:"7",l:"7 dana"},{k:"30",l:"30 dana"},
@@ -29,19 +52,23 @@ const APP = document.getElementById("fdash-app");
 function shell(){
   APP.innerHTML = `
   <div class="fd-header">
-    <h1>${esc(FDASH.title||"Funnel Dashboard")} <small id="updated"></small></h1>
+    <div class="brand"><div class="logo">${IC.funnel}</div><h1>${esc(FDASH.title||"Funnel Dashboard")} <small id="updated"></small></h1></div>
+    <div class="seg" id="modeChips"></div>
     <div class="controls">
       <div id="siteChips" class="controls"></div>
-      <div class="sep"></div>
       <div id="rangeChips" class="controls"></div>
-      <div class="sep"></div>
-      <button class="chip ghost" id="refreshBtn" title="Ponovo povuci podatke sa svih sajtova">↻ Osveži</button>
-      ${FDASH.settingsUrl?`<a class="chip ghost" href="${FDASH.settingsUrl}" style="text-decoration:none">⚙ Sajtovi</a>`:""}
-      ${FDASH.standalone && FDASH.logoutUrl?`<span class="fd-user">${esc(FDASH.userName||"")}</span><a class="chip ghost" href="${FDASH.logoutUrl}" style="text-decoration:none">Odjava</a>`:""}
+      <button class="ibtn" id="refreshBtn" title="Ponovo povuci podatke sa svih sajtova" aria-label="Osveži podatke">${IC.refresh}</button>
+      <button class="btn-pri" id="anBtn" style="display:none">${IC.activity}<span>Analiza</span></button>
+      <div class="user" id="userMenu"><button class="avatar" id="avatarBtn" aria-label="Nalog">${esc(initials(FDASH.userName))}</button>
+        <div class="menu"><div class="who">${esc(FDASH.userName||"")}</div>
+          ${FDASH.settingsUrl?`<a href="${FDASH.settingsUrl}">${IC.settings}Sajtovi</a>`:""}
+          ${FDASH.logoutUrl?`<a href="${FDASH.logoutUrl}">${IC.logout}Odjava</a>`:""}
+        </div></div>
     </div>
   </div>
   <div class="fd-main">
     <div id="fdErrors"></div>
+    <div id="mapView"></div>
     <div id="overview">
       <section class="kpis" id="kpis"></section>
       <section class="card" id="prio" style="margin-bottom:16px"></section>
@@ -50,17 +77,21 @@ function shell(){
         <div class="card"><h2>Svi funneli – rang lista</h2><table id="leader"></table></div>
         <div class="card"><h2>Uvidi</h2><div class="tabs" id="insTabs"></div><div class="ins" id="insights"></div></div>
       </section>
-      <h2 style="font-size:14px;margin:0 0 12px">Svi funneli <span class="badge">klikni na funnel da ga otvoriš</span></h2>
+      <h2 style="font-size:15px;margin:8px 0 12px;font-weight:600">Svi funneli <span class="badge">klikni na funnel da ga otvoriš</span></h2>
       <section id="funnels" class="fgrid"></section>
     </div>
     <div id="detail"></div>
   </div>`;
   document.getElementById("refreshBtn").onclick=()=>load(true);
+  const um=document.getElementById("userMenu");
+  document.getElementById("avatarBtn").onclick=e=>{e.stopPropagation();um.classList.toggle("open");};
+  document.addEventListener("click",()=>um.classList.remove("open"));
 }
 
 let loading=false;
 async function load(refresh){
   loading=true;
+  const rb=document.getElementById("refreshBtn"); if(rb) rb.classList.add("spin");
   try{ localStorage.setItem("fdash_period", JSON.stringify(state.period)); }catch(e){}
   const u=document.getElementById("updated"); if(u) u.textContent="· učitavam…";
   try{
@@ -79,14 +110,15 @@ async function load(refresh){
 }
 
 /* ---------------- state ---------------- */
-let state = { site:"all", period:null, insTab:"bad", sort:"revenue", zoom:1, view:null };
+let state = { site:"all", period:null, insTab:"bad", sort:"revenue", zoom:1, view:null, mode:"map" };
+try{ if(localStorage.getItem("fdash_mode")==="list") state.mode="list"; }catch(e){}
 function go(id){ state.view=id||null; try{ history.pushState(null,"",id?"#/funnel/"+id:location.pathname) }catch(e){} render(); window.scrollTo(0,0); }
 
 const fmt = n => new Intl.NumberFormat("sr-RS",{maximumFractionDigits:0}).format(n);
 const eur = n => fmt(n)+" "+CUR();
 const pct = (a,b) => b ? (a/b*100) : 0;
 const p1 = n => n.toFixed(1).replace(".",",")+"%";
-const TYPE_LABEL = {landing:"Landing",optin:"Opt-in",checkout:"Checkout",bump:"Order bump",upsell:"Upsell",downsell:"Downsell",thankyou:"Thank you"};
+const TYPE_LABEL = {landing:"Landing",optin:"Opt-in",checkout:"Checkout",bump:"Order bump",upsell:"Upsell",downsell:"Downsell",thankyou:"Hvala"};
 
 /* Benchmarks za ocenjivanje koraka (možemo da ih podesimo po vašim ciljevima) */
 const BENCH = {
@@ -125,20 +157,29 @@ function grade(st){
 
 /* ---------------- render ---------------- */
 function renderControls(){
+  const mc=document.getElementById("modeChips");
+  mc.innerHTML=[["map","Mapa"],["list","Detaljno"]].map(([k,l])=>`<button class="${state.mode===k&&!state.view?"active":""}" data-mode="${k}">${l}</button>`).join("");
+  mc.querySelectorAll("button").forEach(b=>b.onclick=()=>{ state.mode=b.dataset.mode; try{localStorage.setItem("fdash_mode",state.mode)}catch(e){} go(null); });
   const sc=document.getElementById("siteChips");
-  sc.innerHTML=[{id:"all",name:"Svi sajtovi"},...(DATA?DATA.sites:[])].map(s=>`<button class="chip ${state.site===s.id?"active":""}" data-site="${s.id}">${s.name}</button>`).join("");
-  sc.querySelectorAll("button").forEach(b=>b.onclick=()=>{state.site=b.dataset.site;go(null)});
+  const sites=[{id:"all",name:"Svi sajtovi"},...(DATA?DATA.sites:[])];
+  sc.innerHTML=`<label class="pick">${IC.globe}<select id="siteSel" aria-label="Sajt">${sites.map(s=>`<option value="${s.id}" ${state.site===s.id?"selected":""}>${s.name}</option>`).join("")}</select></label>`;
+  document.getElementById("siteSel").onchange=e=>{state.site=e.target.value;go(null)};
   const rc=document.getElementById("rangeChips");
   const P=state.period;
-  rc.innerHTML=PRESETS.map(r=>`<button class="chip ${P.k===r.k?"active":""}" data-r="${r.k}">${r.l}</button>`).join("")+
-    (P.k==="custom"?`<span class="fd-custom"><input type="date" id="pFrom" value="${P.from}" max="${ymd(new Date())}"> – <input type="date" id="pTo" value="${P.to}" max="${ymd(new Date())}"><button class="chip active" id="pApply">Primeni</button></span>`:"");
-  rc.querySelectorAll("[data-r]").forEach(b=>b.onclick=()=>{
-    const k=b.dataset.r;
+  rc.innerHTML=`<label class="pick">${IC.calendar}<select id="periodSel" aria-label="Period">${PRESETS.map(r=>`<option value="${r.k}" ${P.k===r.k?"selected":""}>${r.k==="30"?"Poslednjih 30 dana":r.k==="7"?"Poslednjih 7 dana":r.k==="90"?"Poslednjih 90 dana":r.l}</option>`).join("")}</select></label>`+
+    (P.k==="custom"?`<span class="fd-custom"><input type="date" id="pFrom" value="${P.from}" max="${ymd(new Date())}"> – <input type="date" id="pTo" value="${P.to}" max="${ymd(new Date())}"><button class="act" id="pApply">Primeni</button></span>`:"");
+  document.getElementById("periodSel").onchange=e=>{
+    const k=e.target.value;
     if(k==="custom"){ state.period={k, from:P.from, to:P.to}; renderControls(); return; }
     const [from,to]=presetRange(k); state.period={k,from,to}; load();
-  });
+  };
   const ap=document.getElementById("pApply");
   if(ap) ap.onclick=()=>{ let f=document.getElementById("pFrom").value, t=document.getElementById("pTo").value; if(!f||!t) return; if(f>t){const x=f;f=t;t=x;} state.period={k:"custom",from:f,to:t}; load(); };
+  const an=document.getElementById("anBtn");
+  const showAn=state.mode==="map" && !state.view && typeof MAP!=="undefined";
+  an.style.display=showAn?"":"none";
+  if(showAn){ an.classList.toggle("on",MAP.analysis); an.querySelector("span").textContent=MAP.analysis?"Analiza uključena":"Analiza"; an.onclick=()=>{MAP.analysis=!MAP.analysis;render();}; }
+  document.getElementById("refreshBtn").classList.toggle("spin",!!loading);
 }
 
 function renderKPIs(F){
@@ -231,7 +272,7 @@ function renderFunnels(F){
     return `<div class="fcard" data-id="${f.id}">
       <div class="top"><div><div class="f-title">${leaks?'<span class="alert-dot" title="ima korake koji cure"></span>':""}${f.name}</div>
         <span class="site-tag">${f.site.name} · ${f.site.url} · ${f.steps.length} koraka</span></div>
-        <span class="open-link">Otvori →</span></div>
+        <span class="open-link">Otvori</span></div>
       <div class="rev">${eur(f.revenue)}</div>
       <div class="mini"><span>${fmt(f.orders)} porudžbina</span><span>konv. ${p1(f.cr)}</span><span>AOV ${eur(f.aov)}</span><span>${money2(f.rpv)}/poseta</span></div>
       <div class="strip">${f.steps.map(s=>`<i class="${s.type}" title="${TYPE_LABEL[s.type]}: ${s.name}"></i>`).join("")}</div>
@@ -268,9 +309,9 @@ TIPS.downsell = TIPS.upsell;
 function linkBtns(L, stepId){
   L = L || {};
   let h="";
-  if(L.edit) h+=`<a class="act" href="${L.edit}" target="_blank" rel="noopener">Uredi u FunnelKitu ↗</a>`;
-  if(L.builder) h+=`<a class="act" href="${L.builder}" target="_blank" rel="noopener">Elementor ↗</a>`;
-  if(L.view) h+=`<a class="act ghost" href="${L.view}" target="_blank" rel="noopener">Otvori stranicu ↗</a>`;
+  if(L.edit) h+=`<a class="act" href="${L.edit}" target="_blank" rel="noopener">Uredi u FunnelKitu ${IC.ext}</a>`;
+  if(L.builder) h+=`<a class="act" href="${L.builder}" target="_blank" rel="noopener">Elementor ${IC.ext}</a>`;
+  if(L.view) h+=`<a class="act ghost" href="${L.view}" target="_blank" rel="noopener">Otvori stranicu ${IC.ext}</a>`;
   if(stepId) h+=`<button class="act ghost" data-goto="${stepId}">Prikaži na canvasu</button>`;
   return h;
 }
@@ -378,10 +419,10 @@ function renderDetail(f){
   const revSteps=f.steps.filter(s=>s.revenue).sort((a,b)=>b.revenue-a.revenue);
 
   el.innerHTML=`
-    <div class="dhead"><button class="back" id="backBtn">← Svi funneli</button>
+    <div class="dhead"><button class="back" id="backBtn">${IC.arrowL}Svi funneli</button>
       <div style="flex:1"><h2>${f.name}</h2><span class="site-tag">${f.site.name} · ${f.site.url} · ${f.steps.length} aktivnih koraka</span></div>
-      ${recBtn(f,null,null,"✎ Zabeleži izmenu")}
-      ${f.edit_url?`<a class="act" href="${f.edit_url}" target="_blank" rel="noopener">Otvori funnel u FunnelKitu ↗</a>`:""}</div>
+      ${recBtn(f,null,null,"Zabeleži izmenu")}
+      ${f.edit_url?`<a class="act" href="${f.edit_url}" target="_blank" rel="noopener">Otvori u FunnelKitu ${IC.ext}</a>`:""}</div>
     <section class="kpis">
       ${[["Prihod",eur(f.revenue)],["Porudžbine",fmt(f.orders)],["Konverzija",p1(f.cr)],["AOV",eur(f.aov)],["Po posetiocu",money2(f.rpv)],["Bump + upsell",p1(pct(f.extra,f.revenue))]]
         .map(([l,v])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div></div>`).join("")}
@@ -389,7 +430,7 @@ function renderDetail(f){
     <div class="card" style="margin-bottom:16px">
       <h2>Plan akcije ${totalGain>0?`<span class="badge">ukupan potencijal ~${eur(totalGain)} u ovom periodu</span>`:""}</h2>
       <div class="board">
-        ${col("bad","Ne valja",E.bad,"Nema koraka koji ozbiljno curi 👍")}
+        ${col("bad","Ne valja",E.bad,"Nema koraka koji ozbiljno curi.")}
         ${col("warn","Može bolje",E.warn,"Ništa posebno za unapređenje.")}
         ${col("good","Radi dobro",E.good,"Još nijedan korak nije na cilju.")}
       </div>
@@ -397,7 +438,7 @@ function renderDetail(f){
     <section class="card" id="dchanges" style="margin-bottom:16px"></section>
     <div class="dlayout">
       <div class="canvas" id="canvas">
-        <div class="zoom"><button data-z="-">−</button><button data-z="0">⟲</button><button data-z="+">+</button></div>
+        <div class="zoom"><button data-z="-" aria-label="Umanji">${IC.minus}</button><button data-z="0" aria-label="Vrati zum">${IC.undo}</button><button data-z="+" aria-label="Uvećaj">${IC.plus}</button></div>
         <div class="flow" style="transform:scale(${state.zoom})">${flow}</div>
       </div>
       <div class="card"><h2>Odakle dolazi novac</h2>
@@ -405,7 +446,7 @@ function renderDetail(f){
           <div class="bar"><i style="width:${pct(s.revenue,f.revenue)}%"></i></div></div>`).join(""):`<div class="act-empty">Nema prihoda u ovom periodu.</div>`}
       </div>
     </div>`;
-  renderChangesSection(document.getElementById("dchanges"), CHANGES.filter(c=>c.src===f.site.src && +c.funnel_id===+f.fid), "Za ovaj funnel još nema zabeleženih izmena. Posle svake izmene klikni „✎ Zabeleži izmenu” da bi video da li je vredela.");
+  renderChangesSection(document.getElementById("dchanges"), CHANGES.filter(c=>c.src===f.site.src && +c.funnel_id===+f.fid), "Za ovaj funnel još nema zabeleženih izmena. Posle svake izmene klikni „Zabeleži izmenu” da bi video da li je vredela.");
   bindRec(el);
   document.getElementById("backBtn").onclick=()=>go(null);
   el.querySelectorAll(".zoom button").forEach(b=>b.onclick=()=>{
@@ -447,7 +488,7 @@ function priorities(F){
 let REC=[];
 function recBtn(f, s, hint, label){
   REC.push({f, s, hint});
-  return `<button class="act rec" data-rec="${REC.length-1}">${label||"✎ Zabeleži izmenu"}</button>`;
+  return `<button class="act rec" data-rec="${REC.length-1}">${IC.pen}${label||"Zabeleži izmenu"}</button>`;
 }
 function bindRec(root){
   root.querySelectorAll("[data-rec]").forEach(b=>b.onclick=()=>openRecord(REC[+b.dataset.rec]));
@@ -520,14 +561,14 @@ function verdict(c){
     const z=se?(p2-p1)/se:0;
     const rel=p1?(p2-p1)/p1*100:0;
     if(L<7 || b.step.views<50 || a.step.views<50) return {k:"wait",t:`Prerano za zaključak (${L} ${L===1?"dan":"dana"}, treba bar 7)`,rel};
-    if(z>=1.96) return {k:"good",t:"Vredelo je ✓",rel};
-    if(z<=-1.96) return {k:"bad",t:"Gore je nego pre ✗ (razmisli da vratiš staro)",rel};
+    if(z>=1.96) return {k:"good",t:"Vredelo je",rel};
+    if(z<=-1.96) return {k:"bad",t:"Gore je nego pre (razmisli da vratiš staro)",rel};
     return {k:"neutral",t:"Nema jasne razlike",rel};
   }
   const d=b.funnel.revenue ? (a.funnel.revenue-b.funnel.revenue)/b.funnel.revenue*100 : (a.funnel.revenue>0?100:0);
   if(L<7) return {k:"wait",t:`Prerano za zaključak (${L} ${L===1?"dan":"dana"}, treba bar 7)`,rel:d};
-  if(d>=15) return {k:"good",t:"Vredelo je ✓ (prihod funnela veći)",rel:d};
-  if(d<=-15) return {k:"bad",t:"Prihod funnela pao ✗",rel:d};
+  if(d>=15) return {k:"good",t:"Vredelo je (prihod funnela veći)",rel:d};
+  if(d<=-15) return {k:"bad",t:"Prihod funnela pao",rel:d};
   return {k:"neutral",t:"Nema jasne razlike",rel:d};
 }
 
@@ -558,7 +599,7 @@ function changeHTML(c){
       ${rows.map(r=>`<tr><td>${r[0]}</td><td class="num">${r[1]}</td><td class="num">${r[2]}</td>${r[3]}</tr>`).join("")}</table>
       <div class="cmp-foot">${b.from.split("-").reverse().join(".")}–${b.to.split("-").reverse().join(".")} vs ${a.from.split("-").reverse().join(".")}–${a.to.split("-").reverse().join(".")}
       · <b class="${perDay>=0?"good-t":"bad-t"}">${perDay>=0?"+":""}${eur(perDay)}/dan</b> prihoda funnela
-      ${Math.abs(traffic)>30?` · <span class="warn-t">⚠ saobraćaj se promenio ${traffic>0?"+":""}${traffic.toFixed(0)}%, više veruj stopama nego ukupnim brojevima</span>`:""}</div>`;
+      ${Math.abs(traffic)>30?` · <span class="warn-t">saobraćaj se promenio ${traffic>0?"+":""}${traffic.toFixed(0)}%, više veruj stopama nego ukupnim brojevima</span>`:""}</div>`;
   } else if(c.status==="pending"){
     table=`<div class="cmp-foot">Izmena je zabeležena danas. Od sutra dashboard poredi isti broj dana pre i posle.</div>`;
   }
@@ -587,7 +628,7 @@ let showAllPrio=false;
 function renderPriorities(F){
   const el=document.getElementById("prio");
   const P=priorities(F);
-  if(!P.length){ el.innerHTML=`<h2>Prioriteti</h2><div class="act-empty">Nema koraka ispod cilja u ovom periodu 👍</div>`; return; }
+  if(!P.length){ el.innerHTML=`<h2>Prioriteti</h2><div class="act-empty">Nema koraka ispod cilja u ovom periodu.</div>`; return; }
   const list=showAllPrio?P:P.slice(0,8);
   const total=P.reduce((a,x)=>a+x.gain,0);
   el.innerHTML=`<h2>Šta prvo popraviti <span class="badge">ukupan potencijal ~${eur(total)} u ovom periodu</span></h2>
@@ -604,7 +645,7 @@ function renderPriorities(F){
         <div class="pr-metric">${metric}</div>
         <div class="pr-eff"><span class="eff e${Math.ceil(it.eff.k)}">${it.eff.l}</span></div>
         <div class="pr-gain">+${eur(it.gain)}<span>potencijal</span></div>
-        <div class="pr-btns">${linkBtns(it.custom?it.links:s.links)}<button class="act ghost" data-open="${f.id}">Funnel</button>${recBtn(f,s,it.tips&&it.tips[0]||it.text,"✎ Zabeleži")}</div>
+        <div class="pr-btns">${linkBtns(it.custom?it.links:s.links)}<button class="act ghost" data-open="${f.id}">Funnel</button>${recBtn(f,s,it.tips&&it.tips[0]||it.text,"Zabeleži")}</div>
       </div>`;}).join("")}</div>
     ${P.length>8?`<button class="act ghost" id="prioMore" style="margin-top:10px">${showAllPrio?"Prikaži manje":"Prikaži sve ("+P.length+")"}</button>`:""}`;
   const more=document.getElementById("prioMore"); if(more) more.onclick=()=>{showAllPrio=!showAllPrio; render();};
@@ -634,7 +675,8 @@ function render(){
   if(!DATA){ return; }
   renderControls(); renderErrors();
   const m=state.view?[0,state.view]:null;
-  const ov=document.getElementById("overview"), dt=document.getElementById("detail");
+  const ov=document.getElementById("overview"), dt=document.getElementById("detail"), mv=document.getElementById("mapView");
+  mv.style.display="none";
   if(m){
     const siteSave=state.site; state.site="all";
     const f=scaled().find(x=>x.id===m[1]); state.site=siteSave;
@@ -643,12 +685,17 @@ function render(){
   }
   ov.style.display="block"; dt.style.display="none";
   const F=scaled();
+  if(F.length && state.mode==="map" && typeof renderMap==="function"){
+    ov.style.display="none"; mv.style.display="block"; renderMap(F);
+    document.getElementById("updated").textContent="· "+periodLabel()+(DATA.cached?" · iz keša":"");
+    return;
+  }
   if(!F.length){
     ov.innerHTML=`<div class="fd-empty">Nema pronađenih funnela za ovaj period.<br><br>${FDASH.settingsUrl?`Proveri da li je FunnelKit aktivan i da li su sajtovi dodati u <a href="${FDASH.settingsUrl}">podešavanjima</a>.`:"Probaj drugi period."}</div>`;
     shellNeeded=true;
   } else {
     if(shellNeeded){ shell(); shellNeeded=false; renderControls(); renderErrors(); document.getElementById("overview").style.display="block"; document.getElementById("detail").style.display="none"; }
-    REC=[]; renderKPIs(F); renderPriorities(F); renderChangesSection(document.getElementById("changes"), CHANGES, "Još nema zabeleženih izmena. Kad nešto promeniš na funnelu, klikni „✎ Zabeleži” pored tog koraka i ovde ćeš videti da li je izmena vredela."); renderLeader(F); renderInsights(F); renderFunnels(F);
+    REC=[]; renderKPIs(F); renderPriorities(F); renderChangesSection(document.getElementById("changes"), CHANGES, "Još nema zabeleženih izmena. Kad nešto promeniš na funnelu, klikni „Zabeleži izmenu” pored tog koraka i ovde ćeš videti da li je izmena vredela."); renderLeader(F); renderInsights(F); renderFunnels(F);
   }
   document.getElementById("updated").textContent="· "+periodLabel()+(DATA.cached?" · iz keša":"");
 }
