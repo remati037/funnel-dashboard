@@ -21,6 +21,8 @@ const IC = {
   plus:_i('<path d="M12 5v14M5 12h14"/>'),
   minus:_i('<path d="M5 12h14"/>'),
   image:_i('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>'),
+  sun:'<svg class="i sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+  moon:'<svg class="i moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
   layers:_i('<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>'),
 };
 const initials = e => { const n=String(e||"").split("@")[0].split(/[._-]+/).filter(Boolean); return ((n[0]||"?")[0]+((n[1]||"")[0]||"")).toUpperCase(); };
@@ -48,6 +50,16 @@ function periodLabel(){
 }
 const CUR = () => (!DATA || DATA.currency==="EUR") ? "€" : (DATA.currency||"");
 const APP = document.getElementById("fdash-app");
+/* ---------- tema (svetla / tamna) ---------- */
+function themeNow(){ return document.documentElement.getAttribute("data-theme")==="dark"?"dark":"light"; }
+function setTheme(t){
+  document.documentElement.setAttribute("data-theme",t);
+  try{ localStorage.setItem("fdash_theme",t); }catch(e){}
+  const b=document.getElementById("themeBtn"); if(b) b.title=t==="dark"?"Svetla tema":"Tamna tema";
+}
+(function(){ let t=null; try{ t=localStorage.getItem("fdash_theme"); }catch(e){}
+  if(t!=="dark"&&t!=="light") t=(window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"light";
+  document.documentElement.setAttribute("data-theme",t); })();
 
 function shell(){
   APP.innerHTML = `
@@ -57,6 +69,7 @@ function shell(){
     <div class="controls">
       <div id="siteChips" class="controls"></div>
       <div id="rangeChips" class="controls"></div>
+      <button class="ibtn theme-btn" id="themeBtn" title="${themeNow()==="dark"?"Svetla tema":"Tamna tema"}" aria-label="Promeni temu">${IC.moon}${IC.sun}</button>
       <button class="ibtn" id="refreshBtn" title="Ponovo povuci podatke sa svih sajtova" aria-label="Osveži podatke">${IC.refresh}</button>
       <button class="btn-pri" id="anBtn" style="display:none">${IC.activity}<span>Analiza</span></button>
       <div class="user" id="userMenu"><button class="avatar" id="avatarBtn" aria-label="Nalog">${esc(initials(FDASH.userName))}</button>
@@ -83,6 +96,7 @@ function shell(){
     <div id="detail"></div>
   </div>`;
   document.getElementById("refreshBtn").onclick=()=>load(true);
+  document.getElementById("themeBtn").onclick=()=>setTheme(themeNow()==="dark"?"light":"dark");
   const um=document.getElementById("userMenu");
   document.getElementById("avatarBtn").onclick=e=>{e.stopPropagation();um.classList.toggle("open");};
   document.addEventListener("click",()=>um.classList.remove("open"));
