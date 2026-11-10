@@ -12,13 +12,27 @@ const TTL_OPEN = 15 * 60 * 1000; // period koji uključuje danas
 const TTL_CLOSED = 6 * 60 * 60 * 1000; // zatvoren period
 const cache = new Map<string, { t: number; ttl: number; data: Site }>();
 
+/* Stari plugin (<= 0.4.0) ne šalje adresu za upsell/downsell/thank-you. Te stranice se u FunnelKitu otvaraju
+   i bez porudžbine, a WordPress `?p=ID` preusmeri na pravu adresu – pa i njih možemo da uslikamo. */
+const PAGE_TYPES = ["landing", "optin", "checkout", "upsell", "downsell", "thankyou"];
+function withView(s: any, base: string): Record<string, string> {
+  const links = { ...(s.links || {}) };
+  const id = Number(s.step_id);
+  if (!links.view && id > 0 && PAGE_TYPES.includes(s.type)) links.view = `${base}/?p=${id}`;
+  return links;
+}
+
 function normalize(payload: any, cfg: SiteConfig, idx: number): Site {
   const sid = "s" + idx;
   const funnels: Funnel[] = (payload.funnels || []).map((f: any) => ({
     ...f,
     fid: Number(f.id),
     id: sid + "-" + f.id,
-    steps: (f.steps || []).map((s: any) => ({ ...s, revenue: Math.round(Number(s.revenue || 0) * cfg.rate * 100) / 100 })),
+    steps: (f.steps || []).map((s: any) => ({
+      ...s,
+      revenue: Math.round(Number(s.revenue || 0) * cfg.rate * 100) / 100,
+      links: withView(s, cfg.url),
+    })),
   }));
   return {
     id: sid,

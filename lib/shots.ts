@@ -3,20 +3,20 @@ import { promises as fs } from "fs";
 import path from "path";
 import { devMode, sites } from "./config";
 import { DEMO_HOSTS } from "./demo";
+import { supabaseServer } from "./supabase";
 
 /**
  * Screenshotovi pravih stranica funnela.
  * Lokalno: `puppeteer` (sa svojim Chrome-om). Na Vercelu: `puppeteer-core` + `@sparticuz/chromium`.
- * Keš: lokalno `.cache/shots`, na Vercelu `/tmp` (privremeno – za produkciju ide u Supabase Storage).
+ * Čuvanje: Supabase Storage (bucket `shots`, trajno, deljeno za ceo tim). Lokalno i kao rezerva: disk
+ * (`.cache/shots`, na Vercelu `/tmp`). Slika se pravi samo prvi put i na „Osveži”.
  */
 const VIEW = { width: 1280, height: 860 };
-const TTL = 24 * 60 * 60 * 1000;
+const BUCKET = "shots";
 const DIR = process.env.VERCEL ? "/tmp/fdash-shots" : path.join(process.cwd(), ".cache", "shots");
 const MAX_PAGES = 3;
 
 const hash = (url: string) => createHash("sha1").update(url).digest("hex");
-const autoFile = (url: string) => path.join(DIR, hash(url) + ".jpg");
-const manualFile = (url: string) => path.join(DIR, "m-" + hash(url));
 
 /** Dozvoljene su samo adrese sa sajtova iz liste (i demo sajta lokalno). */
 export function allowedUrl(raw: string | null): URL | null {
@@ -89,38 +89,105 @@ async function capture(url: string): Promise<Buffer> {
 
 const inflight = new Map<string, Promise<Buffer>>();
 
-/** Slika stranice: ručna ako postoji, inače automatska iz keša ili nova. */
-export async function getShot(url: string, refresh = false): Promise<{ body: Buffer; type: string; manual: boolean }> {
-  await fs.mkdir(DIR, { recursive: true });
-  try {
-    const meta = JSON.parse(await fs.readFile(manualFile(url) + ".json", "utf8"));
-    return { body: await fs.readFile(manualFile(url)), type: meta.type, manual: true };
-  } catch { /* nema ručne slike */ }
+/* ---------- skladište: Supabase Storage (trajno) ili disk (lokalno / rezerva) ---------- */
+type Obj = { body: Buffer; type: string };
+interface Store {
+  get(key: string): Promise<Obj | null>;
+  put(key: string, o: Obj): Promise<void>;
+  del(key: string): Promise<void>;
+}
 
-  const file = autoFile(url);
-  if (!refresh) {
+const diskStore: Store = {
+  async get(key) {
+    const f = path.join(DIR, key);
     try {
-      const st = await fs.stat(file);
-      if (Date.now() - st.mtimeMs < TTL) return { body: await fs.readFile(file), type: "image/jpeg", manual: false };
-    } catch { /* nema u kešu */ }
-  }
+      const body = await fs.readFile(f);
+      let type = "image/jpeg";
+      try { type = JSON.parse(await fs.readFile(f + ".json", "utf8")).type || type; } catch { /* auto slika */ }
+      return { body, type };
+    } catch { return null; }
+  },
+  async put(key, o) {
+    const f = path.join(DIR, key);
+    await fs.mkdir(path.dirname(f), { recursive: true });
+    await fs.writeFile(f, o.body);
+    await fs.writeFile(f + ".json", JSON.stringify({ type: o.type, at: new Date().toISOString() }));
+  },
+  async del(key) {
+    const f = path.join(DIR, key);
+    await fs.rm(f, { force: true });
+    await fs.rm(f + ".json", { force: true });
+  },
+};
+
+let storageBroken = false; // bucket ne postoji / nema prava → do restarta koristimo disk
+async function cloudStore(): Promise<Store | null> {
+  if (devMode() || storageBroken) return null;
+  const sb = await supabaseServer();
+  if (!sb) return null;
+  const b = sb.storage.from(BUCKET);
+  const broken = (e: any) => {
+    const m = String(e?.message || e || "");
+    if (/bucket not found|row-level security|unauthorized|not allowed/i.test(m)) {
+      storageBroken = true;
+      console.warn("[shots] Supabase Storage nije podešen (" + m + ") – slike idu na disk. Pokreni supabase.sql.");
+    }
+  };
+  return {
+    async get(key) {
+      const { data, error } = await b.download(key);
+      if (error || !data) { if (error && !/not found|object not found/i.test(String(error.message))) broken(error); return null; }
+      return { body: Buffer.from(await data.arrayBuffer()), type: data.type || "image/jpeg" };
+    },
+    async put(key, o) {
+      const { error } = await b.upload(key, o.body, { contentType: o.type, upsert: true, cacheControl: "3600" });
+      if (error) { broken(error); await diskStore.put(key, o); }
+    },
+    async del(key) {
+      const { error } = await b.remove([key]);
+      if (error) broken(error);
+      await diskStore.del(key);
+    },
+  };
+}
+
+/** Čita iz oblaka, a ako tamo nema (ili nije podešen) – sa diska. */
+async function read(key: string): Promise<Obj | null> {
+  const c = await cloudStore();
+  return (c && (await c.get(key))) || (await diskStore.get(key));
+}
+async function write(key: string, o: Obj) {
+  const c = await cloudStore();
+  await (c || diskStore).put(key, o);
+}
+
+const autoKey = (url: string) => `auto/${hash(url)}.jpg`;
+const manualKey = (url: string) => `manual/${hash(url)}`;
+
+/**
+ * Slika stranice: ručna ako postoji, inače sačuvana automatska.
+ * Nova se pravi SAMO kad slike još nema ili kad je tražen refresh – nema više isteka posle 24h.
+ */
+export async function getShot(url: string, refresh = false): Promise<{ body: Buffer; type: string; manual: boolean; fresh: boolean }> {
+  const [manual, auto] = await Promise.all([read(manualKey(url)), refresh ? null : read(autoKey(url))]);
+  if (manual) return { ...manual, manual: true, fresh: false };
+  if (auto) return { ...auto, manual: false, fresh: false };
+
   let p = inflight.get(url);
   if (!p) {
     p = capture(url).finally(() => inflight.delete(url));
     inflight.set(url, p);
   }
   const body = await p;
-  await fs.writeFile(file, body);
-  return { body, type: "image/jpeg", manual: false };
+  await write(autoKey(url), { body, type: "image/jpeg" }).catch((e) => console.warn("[shots] čuvanje nije uspelo:", e?.message));
+  return { body, type: "image/jpeg", manual: false, fresh: true };
 }
 
 export async function saveManual(url: string, body: Buffer, type: string) {
-  await fs.mkdir(DIR, { recursive: true });
-  await fs.writeFile(manualFile(url), body);
-  await fs.writeFile(manualFile(url) + ".json", JSON.stringify({ type, at: new Date().toISOString() }));
+  await write(manualKey(url), { body, type });
 }
 
 export async function removeManual(url: string) {
-  await fs.rm(manualFile(url), { force: true });
-  await fs.rm(manualFile(url) + ".json", { force: true });
+  const c = await cloudStore();
+  await (c || diskStore).del(manualKey(url));
 }

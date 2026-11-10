@@ -15,11 +15,13 @@ export async function GET(req: NextRequest) {
   const u = allowedUrl(req.nextUrl.searchParams.get("url"));
   if (!u) return NextResponse.json({ message: "Adresa nije sa sajtova iz liste." }, { status: 400 });
   try {
-    const shot = await getShot(u.toString(), req.nextUrl.searchParams.get("refresh") === "1");
+    const refresh = req.nextUrl.searchParams.get("refresh") === "1";
+    const shot = await getShot(u.toString(), refresh);
     return new NextResponse(new Uint8Array(shot.body), {
       headers: {
         "Content-Type": shot.type,
-        "Cache-Control": "private, max-age=300",
+        // slika se menja samo na „Osveži” (tada klijent menja ?v=), pa pregledač sme dugo da je čuva
+        "Cache-Control": refresh ? "no-store" : "private, max-age=86400, stale-while-revalidate=604800",
         "X-Shot-Source": shot.manual ? "manual" : "auto",
       },
     });

@@ -1,5 +1,5 @@
 # Status: Funnel Dashboard (web)
-Ažurirano: 2026-11-09
+Ažurirano: 2026-11-10
 Faza: uživo
 
 ## Gde smo stali
@@ -16,15 +16,20 @@ Faza: uživo
 - Stari prikaz je i dalje tu pod „Detaljno”.
 - Lokalno bez ključeva radi sa DEMO podacima (prave stranice sa nemanjaantic.com, izmišljeni brojevi).
 
+- 2026-11-10: slike stranica se čuvaju trajno (Supabase Storage, bucket `shots`) i prave se samo prvi put
+  ili na dugme **Osveži slike** na mapi. Upsell/downsell i thank-you stranice sada imaju sliku
+  (web koristi `?p=ID` dok se plugin ne ažurira; plugin 0.4.1 šalje pravu adresu).
+
 ## Sledeći korak
+- Pokrenuti novi deo `supabase.sql` (bucket `shots` + pravila) u Supabase SQL editoru.
+- Ažurirati plugin na 0.4.1 na sajtovima (`plugin/funnel-dashboard.zip`) – nije obavezno, `?p=ID` radi i bez toga.
 - Developer proverava na produkciji da li se sličice stranica prave (uputstvo u komentaru na PR #1).
   Ako piše „Slika nije dostupna”, treba logovi `/api/shot` sa Vercela.
-- Screenshotove i ručne slike čuvati u Supabase Storage (sada su u `/tmp` i brišu se posle restarta).
 
 ## Šta fali od Vladimira
 - Potvrda od developera da sličice rade na produkciji.
 - Ključevi sajtova (`FDASH_SITES`) da bi mapa radila sa pravim brojevima.
 
 ## Otvorena pitanja / rizici
-- Upsell i thank-you stranice nekad traže porudžbinu; tada treba ručno ubaciti sliku.
-- Prvo slikanje traje ~10 s po stranici (posle je keširano 24h).
+- Prvo slikanje traje ~10 s po stranici; posle je slika sačuvana dok neko ne klikne „Osveži slike”.
+- Ako bucket `shots` ne postoji, slike idu u `/tmp` na Vercelu (brišu se) – u logovima piše upozorenje.

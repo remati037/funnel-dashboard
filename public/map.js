@@ -1,11 +1,51 @@
 /* Funnel Dashboard – MAPA funnela (glavni ekran).
    Koristi pomoćne funkcije iz dashboard.js (evaluate, priorities, fmt, eur, p1, pct, go, recBtn, IC…). */
-const MAP = { sel: null, analysis: false, bust: {} };
+/* bust: verzija slike po adresi – menja se samo na „Osveži”, pa pregledač inače čuva sliku i ne čeka server */
+const BUST_KEY = "fdash-shot-v";
+const loadBust = () => { try { return JSON.parse(localStorage.getItem(BUST_KEY) || "{}") || {}; } catch { return {}; } };
+const saveBust = () => { try { localStorage.setItem(BUST_KEY, JSON.stringify(MAP.bust)); } catch { /* privatni prozor */ } };
+const MAP = { sel: null, analysis: false, bust: loadBust(), shooting: null };
 
 const shotUrl = (view) => {
   const raw = unesc(view);
   return "/api/shot?url=" + encodeURIComponent(raw) + (MAP.bust[raw] ? "&v=" + MAP.bust[raw] : "");
 };
+
+/* sve stranice sa mape (bez duplikata) */
+const allViews = (F) => [...new Set(F.flatMap((f) => f.steps.map((s) => (s.links || {}).view).filter(Boolean).map(unesc)))];
+
+/* „Osveži slike”: ponovo slika sve stranice (po 3 odjednom) i menja sličice čim koja stigne */
+async function refreshAllShots(F) {
+  if (MAP.shooting) return;
+  const list = allViews(F);
+  let done = 0, failed = 0;
+  MAP.shooting = { done, total: list.length };
+  const btn = () => document.getElementById("shotsBtn");
+  const label = () => { const b = btn(); if (b) b.querySelector("span").textContent = MAP.shooting ? `Slikam ${MAP.shooting.done}/${MAP.shooting.total}…` : "Osveži slike"; };
+  if (btn()) btn().classList.add("busy");
+  label();
+  const queue = [...list];
+  const worker = async () => {
+    for (let raw; (raw = queue.shift()); ) {
+      try {
+        const r = await fetch("/api/shot?refresh=1&url=" + encodeURIComponent(raw), { credentials: "same-origin" });
+        if (!r.ok) throw 0;
+        MAP.bust[raw] = Date.now();
+        saveBust();
+        const src = shotUrl(raw);
+        document.querySelectorAll(`img[data-shot="${CSS.escape(raw)}"]`).forEach((img) => { img.src = src; });
+      } catch { failed++; }
+      MAP.shooting.done = ++done;
+      label();
+    }
+  };
+  await Promise.all([worker(), worker(), worker()]);
+  MAP.shooting = null;
+  if (btn()) btn().classList.remove("busy");
+  label();
+  const m = document.getElementById("shotsMsg");
+  if (m) m.textContent = failed ? `${failed} ${plural(failed, "stranica nije uslikana", "stranice nisu uslikane", "stranica nije uslikano")}` : "Slike su osvežene";
+}
 const plural = (n, one, few, many) => n % 10 === 1 && n % 100 !== 11 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? few : many;
 const bumpName = (s) => String(s.name || "").replace(/^order bump:\s*/i, "") || "Order bump";
 
@@ -39,7 +79,7 @@ function pageCard(f, s, chance) {
   const g = grade(s);
   const hot = isHot(chance, s);
   const thumb = L.view
-    ? `<img src="${shotUrl(L.view)}" alt="" loading="lazy" onload="this.parentNode.classList.add('ok')" onerror="this.parentNode.classList.add('err')"><span class="m-load">Slikam stranicu…</span><span class="m-noimg">${IC.image}Slika nije dostupna</span>`
+    ? `<img src="${shotUrl(L.view)}" data-shot="${esc(unesc(L.view))}" alt="" loading="lazy" onload="this.parentNode.classList.add('ok')" onerror="this.parentNode.classList.add('err')"><span class="m-load">Slikam stranicu…</span><span class="m-noimg">${IC.image}Slika nije dostupna</span>`
     : `<span class="m-noimg" style="display:flex">${IC.image}Nema stranice</span>`;
   return `<div class="m-page ${isSel(f, s) ? "sel" : ""} ${hot ? "hot" : ""}" data-f="${f.id}" data-i="${s.idx}" role="button" tabindex="0" aria-label="${TYPE_LABEL[s.type] || s.type}: detalji">
       ${hot ? `<div class="m-tag">${IC.trendUp}+${eur(chance.gain)} potencijal</div>` : ""}
@@ -112,7 +152,7 @@ function sideStep(f, s) {
   return `<button class="m-close" id="mClose">${IC.arrowL}Sve šanse</button>
     <div class="m-crumb">${f.name}</div>
     <h3 class="m-step-t"><span class="type ${s.type}">${TYPE_LABEL[s.type] || s.type}</span>${s.type === "bump" ? bumpName(s) : s.name}</h3>
-    ${L.view ? `<a href="${L.view}" target="_blank" rel="noopener" class="m-big" title="Otvori stranicu"><img src="${shotUrl(L.view)}" alt=""></a>` : ""}
+    ${L.view ? `<a href="${L.view}" target="_blank" rel="noopener" class="m-big" title="Otvori stranicu"><img src="${shotUrl(L.view)}" data-shot="${esc(unesc(L.view))}" alt=""></a>` : ""}
     <div class="m-stats">
       <div><span>Posetioci</span><b>${fmt(s.views)}</b></div>
       <div><span>${s.type === "checkout" ? "Kupovine" : s.type === "bump" || isOffer(s.type) ? "Prihvatilo" : "Ide dalje"}</span><b>${fmt(s.conversions)}</b></div>
@@ -148,7 +188,8 @@ function renderMap(F) {
   el.innerHTML = `
     <div class="m-sum"><span class="l">Ukupan prihod</span><span class="v">${eur(rev)}</span>
       <span class="s">${F.length} ${plural(F.length, "funnel", "funnela", "funnela")} · ${fmt(orders)} ${plural(orders, "porudžbina", "porudžbine", "porudžbina")} · ${periodLabel()}</span>
-      ${DATA.demo ? `<span class="m-demo">Demo podaci</span>` : ""}</div>
+      ${DATA.demo ? `<span class="m-demo">Demo podaci</span>` : ""}
+      <span class="m-shots"><span class="m-shots-msg" id="shotsMsg"></span><button class="act ghost ${MAP.shooting ? "busy" : ""}" id="shotsBtn" title="Ponovo uslikaj sve stranice sa sajtova (posle izmena na stranicama)">${IC.refresh}<span>${MAP.shooting ? `Slikam ${MAP.shooting.done}/${MAP.shooting.total}…` : "Osveži slike"}</span></button></span></div>
     <div class="m-layout">
       <div class="m-board">${sorted.map(funnelRow).join("")}</div>
       <aside class="m-side" id="mSide">${selS ? sideStep(selF, selS) : sideOverview(F)}</aside>
@@ -158,6 +199,8 @@ function renderMap(F) {
 }
 
 function bindMap(el, F) {
+  const sb = el.querySelector("#shotsBtn");
+  if (sb) sb.onclick = () => refreshAllShots(F);
   el.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => go(b.dataset.open)));
   el.querySelectorAll(".m-page,.m-bump,.m-op").forEach((c) => {
     const open = (e) => {
@@ -179,7 +222,7 @@ function bindMap(el, F) {
   if (!view) return;
   const raw = unesc(view);
   const msg = (t, bad) => { const m = document.getElementById("mMsg"); if (m) { m.textContent = t; m.className = "m-msg" + (bad ? " bad" : ""); } };
-  const reload = () => { MAP.bust[raw] = Date.now(); renderMap(F); };
+  const reload = () => { MAP.bust[raw] = Date.now(); saveBust(); renderMap(F); };
   el.querySelector("#mRefresh").onclick = async () => {
     msg("Pravim novu sliku… (10–20 s)");
     const r = await fetch("/api/shot?refresh=1&url=" + encodeURIComponent(raw), { credentials: "same-origin" });
