@@ -123,7 +123,7 @@ function funnelRow(f) {
   return `<section class="m-row" id="row-${f.id}">
       <div class="m-head">
         <div><button class="m-name" data-open="${f.id}" title="Otvori detaljnu analizu funnela">${f.name}${IC.arrowR}</button>
-          <div class="m-meta">${f.site.name} · ${fmt(f.orders)} ${plural(f.orders, "porudžbina", "porudžbine", "porudžbina")} · konverzija ${p1(f.cr)}</div></div>
+          <div class="m-meta">${f.site.name} · ${fmt(f.orders)} ${plural(f.orders, "porudžbina", "porudžbine", "porudžbina")} · konverzija ${p1(f.cr)}${f.drafts_hidden ? ` · <span class="m-drafts" title="Koraci u draftu (ugašeni u FunnelKitu) nisu prikazani">${f.drafts_hidden} ${plural(f.drafts_hidden, "korak", "koraka", "koraka")} u draftu skriveno</span>` : ""}</div></div>
         <div class="m-rev">${eur(f.revenue)}<small>prihod u periodu</small></div>
       </div>
       <div class="m-flow">${flow}</div>

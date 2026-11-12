@@ -28,8 +28,10 @@ function funnel(id: number, name: string, steps: S[]) {
 }
 
 export function demoSite(): Site {
-  return {
+  const site: Site = {
     id: "s0",
+    plugin_version: "demo",
+    hides_drafts: true,
     src: B,
     name: "DEMO · Antić",
     url: "nemanjaantic.com",
@@ -64,4 +66,6 @@ export function demoSite(): Site {
       ]),
     ],
   };
+  site.funnels[0].drafts_hidden = 1; // primer oznake za skrivene draft korake
+  return site;
 }

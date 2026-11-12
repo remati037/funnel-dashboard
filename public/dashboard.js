@@ -681,6 +681,8 @@ function renderErrors(){
   const el=document.getElementById("fdErrors");
   const E=(DATA&&DATA.errors)||[];
   el.innerHTML=E.length?`<div class="fd-errors"><b>Neki sajtovi nisu učitani:</b><br>${E.map(e=>`${esc(e.site)}: ${esc(e.message)}`).join("<br>")}<br>${FDASH.settingsUrl?`<a href="${FDASH.settingsUrl}">Proveri podešavanja sajtova →</a>`:"Javi administratoru."}</div>`:"";
+  const W=(DATA&&DATA.warnings)||[];
+  if(W.length) el.innerHTML+=`<div class="fd-errors fd-warn"><b>Proveri plugin:</b><br>${W.map(e=>`${esc(e.site)}: ${esc(e.message)}`).join("<br>")}</div>`;
 }
 const safeUrl = u => (typeof u==="string" && /^https?:\/\//i.test(u)) ? esc(u) : "";
 const esc = s => String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));

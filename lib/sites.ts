@@ -5,8 +5,11 @@ export type Step = {
   type: string; step_id: number; name: string; views: number; conversions: number; revenue: number;
   links?: Record<string, string>;
 };
-export type Funnel = { id: string; fid: number; name: string; edit_url?: string; steps: Step[] };
-export type Site = { id: string; src: string; name: string; url: string; currency: string; rate: number; funnels: Funnel[] };
+export type Funnel = { id: string; fid: number; name: string; edit_url?: string; drafts_hidden?: number; steps: Step[] };
+export type Site = {
+  id: string; src: string; name: string; url: string; currency: string; rate: number; funnels: Funnel[];
+  plugin_version: string; hides_drafts: boolean;
+};
 
 const TTL_OPEN = 15 * 60 * 1000; // period koji uključuje danas
 const TTL_CLOSED = 6 * 60 * 60 * 1000; // zatvoren period
@@ -42,6 +45,9 @@ function normalize(payload: any, cfg: SiteConfig, idx: number): Site {
     currency: payload.site?.currency || "",
     rate: cfg.rate,
     funnels,
+    plugin_version: String(payload.plugin_version || "?"),
+    // Plugin <= 0.4.1 ne javlja da li izbacuje draft korake – onda ne možemo da garantujemo da ih nema.
+    hides_drafts: payload.hides_drafts === true,
   };
 }
 
@@ -84,9 +90,19 @@ export async function aggregate(from: string, to: string, refresh = false) {
     return { currency: CURRENCY, from, to, generated_at: new Date().toISOString(), cached: false, demo: true, sites: [demoSite()], errors: [] };
   }
   const results = await Promise.allSettled(list.map((s) => fetchSite(s.url, from, to, refresh)));
-  const out = { currency: CURRENCY, from, to, generated_at: new Date().toISOString(), cached: false, sites: [] as Site[], errors: [] as { site: string; message: string }[] };
+  const out = {
+    currency: CURRENCY, from, to, generated_at: new Date().toISOString(), cached: false, sites: [] as Site[],
+    errors: [] as { site: string; message: string }[], warnings: [] as { site: string; message: string }[],
+  };
   results.forEach((r, i) => {
-    if (r.status === "fulfilled") out.sites.push(r.value);
+    if (r.status === "fulfilled") {
+      out.sites.push(r.value);
+      if (!r.value.hides_drafts)
+        out.warnings.push({
+          site: r.value.name,
+          message: `stari plugin (${r.value.plugin_version}) – mogu da se prikazuju i draft koraci. Ažuriraj Funnel Dashboard plugin na 0.4.2.`,
+        });
+    }
     else out.errors.push({ site: list[i].name || list[i].url, message: (r.reason as Error)?.message || "Greška" });
   });
   if (!list.length) out.errors.push({ site: "Dashboard", message: "Nema podešenih sajtova (FDASH_SITES)." });

@@ -1,5 +1,5 @@
 # Status: Funnel Dashboard (web)
-Ažurirano: 2026-11-10
+Ažurirano: 2026-11-12
 Faza: uživo
 
 ## Gde smo stali
@@ -20,7 +20,12 @@ Faza: uživo
   ili na dugme **Osveži slike** na mapi. Upsell/downsell i thank-you stranice sada imaju sliku
   (web koristi `?p=ID` dok se plugin ne ažurira; plugin 0.4.1 šalje pravu adresu).
 
+- 2026-11-12: plugin 0.4.2 – draft/ugašeni koraci se ne šalju, a uz funnel ide broj skrivenih (`drafts_hidden`).
+  Mapa kod funnela piše „N koraka u draftu skriveno”. Ako sajt ima stariji plugin, gore se pojavi žuto
+  upozorenje „stari plugin – mogu da se prikazuju i draft koraci”.
+
 ## Sledeći korak
+- **Instalirati plugin 0.4.2 na sve sajtove** (`plugin/funnel-dashboard.zip`) – bez toga web ne može da sakrije draftove.
 - Pokrenuti novi deo `supabase.sql` (bucket `shots` + pravila) u Supabase SQL editoru.
 - Ažurirati plugin na 0.4.1 na sajtovima (`plugin/funnel-dashboard.zip`) – nije obavezno, `?p=ID` radi i bez toga.
 - Developer proverava na produkciji da li se sličice stranica prave (uputstvo u komentaru na PR #1).
